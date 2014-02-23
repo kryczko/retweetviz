@@ -47,6 +47,11 @@ headnodesize = 35
 othernodesize = 20
 n_chains = 5 # constant
 rotate = []
+
+node_p_chain = int(n_nodes / 5.)
+# radius between nodes
+r = (ysize - 150)/ node_p_chain
+
 def set_node_positions():
     # the 'king' node
     xorig = int(xsize/2.)
@@ -55,13 +60,6 @@ def set_node_positions():
     y.append(int(yorig))
     nodecolours.append(darkBlue)
     nodesizes.append(headnodesize)
-
-    # the others attached by a 'chain'
-
-    # radius between nodes
-    node_p_chain = int(n_nodes / 5.)
-    # radius between nodes
-    r = (ysize - 150)/ node_p_chain
 
     for i in range(1,n_chains + 1):
         for j in range(1,node_p_chain + 1):
@@ -81,13 +79,64 @@ def draw_arrow(xpos, ypos):
     
     
 def print_info_text():
-    edgeinfo1 = font.render("Smaller nodes - 100 entities following the node above", 1, black)
+    edgeinfo1 = font.render("Smaller nodes - groups of 50 entities following the node above", 1, black)
     edgeinfo2 = font.render("Larger node - An entity with many followers", 1, black)
     screen.blit(edgeinfo1, (50, 50))
     screen.blit(edgeinfo2, (50, 80))
 
-            
+
+def has_message_hit_node(node,mx, my):
+    for i in range(n_nodes):
+        if abs(mx - x[i]) < 20 and abs(my - y[i]) < 20 and i != node:
+           retweet_message = font.render("Entities retweeting!",1,black)
+           screen.blit(retweet_message,(mx-50,my-50))
+           time.sleep(0.1)
+           return i
+    return -1
+
+end_pos_nodes = []
+for i in range(1,n_nodes+1):
+    end_pos_nodes.append(50)
+def show_rates(node, t, layer):
+    n_retweets = 0
+    entities_per_node = 100
+    rate_text = font.render("Rate of retweeting:",1,black)
+    screen.blit(rate_text,(300,ysize - 50))
+    if node == 0 and layer == 1:
+       start_ypos = ysize - 50
+       start_xpos = 500
+       end_x_pos = trans_prob * n_chains * entities_per_node * exp(-t/0.05) * 20
+       n_retweets = trans_prob * n_chains * entities_per_node * exp(-t/0.05)
+       pygame.draw.rect(screen, black, [start_xpos, start_ypos, end_x_pos, 30], 5)
+    elif node == 0 and layer != 1:
+        entities_per_node = trans_prob**layer * entities_per_node
+        start_ypos = ysize - 50
+        start_xpos = 500
+        end_x_pos = trans_prob * n_chains * entities_per_node * exp(-t/0.05) * 20
+        n_retweets = trans_prob * n_chains * entities_per_node * exp(-t/0.05)
+        pygame.draw.rect(screen, black, [start_xpos, start_ypos, end_x_pos, 30], 5)
+    elif node != 0 and layer == 1:
+        start_ypos = ysize - 50
+        start_xpos = 500
+        end_x_pos = trans_prob * entities_per_node * exp(-t/0.05) * 20
+        n_retweets = trans_prob * entities_per_node * exp(-t/0.05)
+        pygame.draw.rect(screen, black, [start_xpos, start_ypos, end_x_pos, 30], 5)
+    elif node != 0 and layer != 1:
+        entities_per_node = trans_prob**layer * entities_per_node
+        start_ypos = ysize - 50
+        start_xpos = 500
+        end_x_pos = trans_prob * entities_per_node * exp(-t/0.05) * 20
+        n_retweets = trans_prob * entities_per_node * exp(-t/0.05)
+        pygame.draw.rect(screen, black, [start_xpos, start_ypos, end_x_pos, 30], 5)
+    return n_retweets  
+        
+def which_layer(dist):
+    layer = dist / float(r)
+    return round(layer)        
+     
 def send_a_message(node):
+    entities = []
+    total_retweets = 0
     if node == 0:
         mx = []
         my = []
@@ -96,12 +145,25 @@ def send_a_message(node):
             my.append(y[0])
         move = True
         while move:
+            node_count = 0
             for i in range(n_chains):
                 pygame.draw.rect(screen, green, [mx[i], my[i], 30, 20])
-                mx[i] -= 10*sin((i+1)*0.523 + 1.57)
-                my[i] -= 10*cos((i+1)*0.523 + 1.57)
+                mx[i] -= 2*sin((i+1)*0.523 + 1.57)
+                my[i] -= 2*cos((i+1)*0.523 + 1.57)
                 if (my[i] > ysize - 100):
                     move = False
+                if has_message_hit_node(node,mx[i], my[i]) != -1:
+                    node_count += 1
+                    if node_count == n_chains:
+                        t1 = time.time()
+                        minutes = (t1 - t0) % 60
+                        t = minutes / 60.0
+                        total_retweets += show_rates(node, t, which_layer(sqrt((mx[i] - x[0])**2+(my[i] - y[0])**2)))
+                else:
+                    t0 = time.time()
+            
+            n_retweets = font.render("Total retweets: %i" % total_retweets ,1,black)
+            screen.blit(n_retweets,(50,ysize - 50))
             pygame.display.flip()
             show_main()
     else:
@@ -113,23 +175,31 @@ def send_a_message(node):
         ypos = y[node]
         while move:
             pygame.draw.rect(screen, green, [xpos, ypos, 30, 20])
-            pygame.display.flip()
-            show_main()
             if node < rotate[0] - 1:
-                xpos -= 10*sin(angle + 1.57)
-                ypos -= 10*cos(angle - 1.57)
+                xpos -= 2*sin(angle + 1.57)
+                ypos -= 2*cos(angle - 1.57)
             else:
-                xpos -= 10*sin(angle - 1.57)
-                ypos -= 10*cos(angle + 1.57)
-                
-            if (ypos > ysize - 100 - y[0]):
+                xpos -= sin(angle - 1.57)
+                ypos -= cos(angle + 1.57)
+            if has_message_hit_node(node,xpos,ypos) != -1:
+                t1 = time.time()
+                minutes = (t1 - t0) % 60
+                t = minutes / 60.0
+                total_retweets += show_rates(node, t, which_layer(sqrt((xpos - x[0])**2+(ypos - y[0])**2)))
+            else:
+                t0 = time.time()  
+            if (ypos > abs(ysize - 50 - y[0]) or xpos > abs(xsize - 20)):
                 move = False
+            n_retweets = font.render("Total retweets: %i" % total_retweets ,1,black)
+            screen.blit(n_retweets,(50,ysize - 50))
+            pygame.display.flip()
+            show_main()     
 
 def clicked_a_node(xypos):
     for i in range(n_nodes):
         if abs(xypos[0] - x[i]) < 20 and abs(xypos[1] - y[i]) < 20:
             text = font.render("I tweeted!",1, green)
-            screen.blit(text, xypos)
+            screen.blit(text, (xypos[0], xypos[1]-30))
             pygame.display.flip()
             time.sleep(0.5)
             send_a_message(i)
